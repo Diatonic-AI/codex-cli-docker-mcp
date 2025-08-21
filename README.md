@@ -60,11 +60,11 @@ Choose one of the two:
   - Alternatively, run Codex in this container and forward port 1455 to your local machine, then open the provided `http://localhost:1455/...` URL.
 
 2) OpenAI API key (usage-based)
-- Export your key at runtime so it isn’t committed to disk:
-  ```bash
-  export OPENAI_API_KEY={{OPENAI_API_KEY}}
-  docker compose run --rm -e OPENAI_API_KEY codex
-  ```
+- Export your key at runtime so it isn't committed to disk:
+-  ```bash
+-  export OPENAI_API_KEY={{OPENAI_API_KEY}}
+-  docker compose run --rm -e OPENAI_API_KEY codex
+-  ```
 - To force API-key mode when both exist, set in config: `preferred_auth_method = "apikey"`.
 
 Notes:
@@ -87,7 +87,7 @@ Put your code inside `./volumes/workspace`. Codex runs with `/workspace` as the 
 # Interactive TUI
 codex
 
-# Non-interactive “automation mode”
+# Non-interactive "automation mode"
 codex exec --full-auto "write unit tests for utils/date.ts"
 
 # Use OSS host (e.g., Ollama)
