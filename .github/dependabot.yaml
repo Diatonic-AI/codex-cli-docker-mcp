@@ -2,29 +2,28 @@
 
 version: 2
 updates:
-  - package-ecosystem: bun
-    directory: .github/actions/codex
+  # Node.js dependencies in GitHub Actions
+  - package-ecosystem: npm
+    directory: /.github/actions/codex
     schedule:
       interval: weekly
+  # Rust dependencies
   - package-ecosystem: cargo
-    directories:
-      - codex-rs
-      - codex-rs/*
+    directory: /codex-rs
     schedule:
       interval: weekly
+  # Dev containers
   - package-ecosystem: devcontainers
     directory: /
     schedule:
       interval: weekly
+  # Docker dependencies
   - package-ecosystem: docker
-    directory: codex-cli
-    schedule:
-      interval: weekly
-  - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: rust-toolchain
-    directory: codex-rs
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
       interval: weekly
