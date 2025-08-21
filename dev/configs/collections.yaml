@@ -1,0 +1,9 @@
+collections:
+  default:
+    name: embeddings__demo__text-embedding-3-small__v1
+    vector_size: 1536
+    distance: Cosine
+    on_disk: true
+aliases:
+  active: embeddings__demo__text-embedding-3-small__v1
+

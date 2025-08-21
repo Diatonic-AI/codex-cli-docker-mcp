@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+secrets/
+runs/
+__runs_cache__/
+*.log
+*.sqlite
+# docker
+**/.docker-cache/
+**/.venv/
+
+# node
+node_modules/
+
+# macOS/Linux noise
+.DS_Store
+Thumbs.db
+

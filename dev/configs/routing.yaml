@@ -1,0 +1,6 @@
+routing:
+  sources:
+    api: embeddings_default
+    fs: embeddings_default
+    http: embeddings_default
+

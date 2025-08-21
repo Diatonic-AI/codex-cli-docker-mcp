@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QUEUE_STREAM=embeddings.incoming
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - IN_STREAM=embeddings.incoming
+      - OUT_STREAM=embeddings.claimed
+      - GROUP=orchestrators
+      - RPS_LIMIT=60
+    depends_on:
+      - redis
+
+  supervisor:
+    build:
+      context: ./services/supervisor
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - IN_STREAM=embeddings.claimed
+      - GROUP=supervisors
+      - QDRANT_URL=http://qdrant:6333
+      - DEFAULT_COLLECTION=embeddings__demo__text-embedding-3-small__v1
+    depends_on:
+      - redis
+      - qdrant
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  codex-runner:
+    build:
+      context: ./runners/codex-runner
+    image: codex-runner:latest
+
+volumes:
+  qdrant-data:
+

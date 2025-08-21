@@ -1,0 +1,10 @@
+models:
+  text-embedding-3-small:
+    size: 1536
+    rps_limit: 150
+    tpm_limit: 2_000_000
+  text-embedding-3-large:
+    size: 3072
+    rps_limit: 50
+    tpm_limit: 2_000_000
+

@@ -12,9 +12,13 @@ jobs:
       - name: Build containers
         run: docker compose -f docker-compose.yaml build
       - name: Start stack
-        run: docker compose -f docker-compose.yaml up -d
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: docker compose -f docker-compose.ci.yaml up -d
       - name: Self-check
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: bin/self-check.sh
       - name: Teardown
         if: always()
-        run: docker compose -f docker-compose.yaml down -v
+        run: docker compose -f docker-compose.ci.yaml down -v

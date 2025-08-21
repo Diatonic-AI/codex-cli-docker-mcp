@@ -1,0 +1,6 @@
+chunking:
+  default:
+    strategy: recursive
+    max_chunk_tokens: 750
+    overlap_tokens: 50
+

@@ -1,0 +1,29 @@
+version: 1
+name: embeddings_default
+steps:
+  - id: normalize_input
+    action: normalize
+  - id: chunk_text
+    action: chunk
+    with:
+      strategy: recursive
+      max_chunk_tokens: 750
+      overlap_tokens: 50
+  - id: run_embedding
+    action: run_container
+    with:
+      image: codex-runner:latest
+      cmd: ["python", "-m", "runner", "--model", "${MODEL_NAME}", "--input", "/work/input.json", "--output", "/work/output.json"]
+      envFrom: ["OPENAI_API_KEY"]
+      timeout_s: 60
+  - id: upsert_qdrant
+    action: qdrant_upsert
+    with:
+      collection: "${DEFAULT_COLLECTION}"
+      batch_size: 128
+      distance: "Cosine"
+  - id: verify_publish
+    action: verify_publish
+    with:
+      require_count_gt: 0
+
