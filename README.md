@@ -203,6 +203,15 @@ The upstream repository is cloned into `./codex-src/` for reference only; Codex 
 
 <!-- Begin ToC -->
 
+- [Prerequisites](#prerequisites)
+- [Build and run](#build-and-run)
+- [Authentication (headless-friendly)](#authentication-headless-friendly)
+- [Recommended defaults (config.toml)](#recommended-defaults-configtoml)
+- [Developing tools, runners, and agents](#developing-tools-runners-and-agents)
+- [Docker Compose in production](#docker-compose-in-production)
+- [Headless login examples](#headless-login-examples)
+- [Certificates (Admin API)](#certificates-admin-api)
+- [Repository reference](#repository-reference)
 - [Quickstart](#quickstart)
   - [Installing and running Codex CLI](#installing-and-running-codex-cli)
   - [Using Codex with your ChatGPT plan](#using-codex-with-your-chatgpt-plan)
