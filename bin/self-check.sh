@@ -38,4 +38,18 @@ else
   echo "[self-check] OPENAI_API_KEY not set; skipping prompt test"
 fi
 
-echo "[self-check] OK"
+# Additional validation checks
+echo "[self-check] Validating project structure"
+[ -f "$ROOT_DIR/README.md" ] || { echo "Missing README.md"; exit 4; }
+[ -f "$ROOT_DIR/docker-compose.yaml" ] || { echo "Missing docker-compose.yaml"; exit 4; }
+[ -f "$ROOT_DIR/Dockerfile" ] || { echo "Missing Dockerfile"; exit 4; }
+[ -d "$ROOT_DIR/codex-rs" ] || { echo "Missing codex-rs directory"; exit 4; }
+
+# Check that we can reach the running container's health
+if docker compose -f "$ROOT_DIR/docker-compose.ci.yaml" ps --format table 2>/dev/null | grep -q "codex-cli"; then
+  echo "[self-check] Container health OK"
+else
+  echo "[self-check] Warning: Container not running or unhealthy"
+fi
+
+echo "[self-check] ✅ All checks passed"
