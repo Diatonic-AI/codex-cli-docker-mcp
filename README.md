@@ -1,3 +1,191 @@
+# OpenAI Codex CLI in Docker (Production-ready)
+
+This directory packages the OpenAI Codex CLI to run inside Docker with persistent data volumes under `./volumes/`. It enables a live Codex CLI while you iteratively develop tools, runners, and agents in the mounted workspace.
+
+- Codex home (auth.json, config.toml, logs): `./volumes/codex_home`
+- Workspace (your code, tools, MCP servers): `./volumes/workspace`
+
+## Prerequisites
+- Docker Engine / Docker Desktop
+- Optional: ChatGPT Plus/Pro/Team for login or an OpenAI API key
+
+## Build and run
+```bash
+# From this directory
+docker compose build
+mkdir -p volumes/codex_home volumes/workspace
+
+# Launch an interactive shell in the container
+docker compose run --rm codex
+```
+
+Inside the container you can run:
+```bash
+codex --version
+codex
+```
+
+## Authentication (headless-friendly)
+
+Security-first policy for keys:
+- Never commit keys to git. The `secrets/` directory is ignored and used only for Docker secrets.
+- Never echo keys to the terminal. Set them via environment variables.
+- Prefer Docker secrets to inject keys into the container as files. Our entrypoint reads `/run/secrets/openai_api_key` and exports it into the process only, without writing to `~/.codex`.
+
+Ephemeral per-run key issuance (recommended):
+- Store your admin key in a secure local environment variable, e.g., `CODEX_ADMIN_KEY` (do not write this to disk).
+- Use `./bin/codex-secure-run` to:
+  1) obtain a fresh service key per run (replace the placeholder function with your key-issuance API call),
+  2) write it to `./secrets/openai_api_key` with 0600 perms, and
+  3) start Codex in API-key mode without persisting the key.
+
+Example:
+```bash
+# Precondition: export CODEX_ADMIN_KEY in your shell or secret manager
+env | grep -q '^CODEX_ADMIN_KEY=' || echo 'Set CODEX_ADMIN_KEY first'
+
+# Interactive TUI with ephemeral key
+./bin/codex-secure-run
+
+# Non-interactive execution with ephemeral key
+./bin/codex-secure-run exec --full-auto "explain utils.ts"
+```
+
+If you must use ChatGPT login instead, follow one of:
+Choose one of the two:
+
+1) ChatGPT sign-in (recommended)
+- Easiest path is to authenticate on a machine with a browser, then copy the resulting `auth.json` into `./volumes/codex_home/`.
+  - On your laptop: run `codex login`, complete browser flow, then copy `~/.codex/auth.json` here as `./volumes/codex_home/auth.json`.
+  - Alternatively, run Codex in this container and forward port 1455 to your local machine, then open the provided `http://localhost:1455/...` URL.
+
+2) OpenAI API key (usage-based)
+- Export your key at runtime so it isn’t committed to disk:
+  ```bash
+  export OPENAI_API_KEY={{OPENAI_API_KEY}}
+  docker compose run --rm -e OPENAI_API_KEY codex
+  ```
+- To force API-key mode when both exist, set in config: `preferred_auth_method = "apikey"`.
+
+Notes:
+- If you used older versions pre-0.20.0, remove any stale `auth.json` and re-login.
+- Never commit secrets; the `volumes/` path is in `.gitignore`.
+
+## Recommended defaults (config.toml)
+The container seeds `~/.codex/config.toml` with safe defaults:
+- `approval_policy = "on-request"` and `sandbox_mode = "workspace-write"`
+- `disable_response_storage = true` (ZDR friendly)
+- `network_access = true` for workspace-write
+- `preferred_auth_method = "chatgpt"`
+
+You can edit `./volumes/codex_home/config.toml` on the host and it will be used on next run.
+
+## Developing tools, runners, and agents
+Put your code inside `./volumes/workspace`. Codex runs with `/workspace` as the CWD. Examples:
+
+```bash
+# Interactive TUI
+codex
+
+# Non-interactive “automation mode”
+codex exec --full-auto "write unit tests for utils/date.ts"
+
+# Use OSS host (e.g., Ollama)
+CODEX_OSS_PORT=11434 codex --oss -m gpt-oss:20b
+```
+
+To integrate MCP servers, add them to `./volumes/codex_home/config.toml` under `[mcp_servers.<name>]` per the docs.
+
+## Docker Compose in production
+- The same compose file can run in CI or servers. For production hardening:
+  - Remove `stdin_open`/`tty`.
+  - Pin `@openai/codex` version by rebuilding the image with a specific tag.
+  - Lock down networking and only expose required ports.
+
+## Headless login examples
+- Copy an existing auth file into this project:
+  ```bash
+  # From a machine where you completed codex login
+  cp ~/.codex/auth.json ./volumes/codex_home/auth.json
+  ```
+- Or use SSH port-forwarding to finish the login flow in your local browser:
+  ```bash
+  ssh -L 1455:localhost:1455 <user>@<remote-host>
+  # In the remote shell, run inside container:
+  codex login
+  # Then open the printed http://localhost:1455/... URL locally
+  ```
+
+## Certificates (Admin API)
+
+Project targeting
+- By default, per-run service accounts and keys are created in the CodexLocal project.
+- To change, set PROJECT_NAME before running ./bin/codex-secure-run.
+- To resolve a project id by name for certificate project commands:
+  ```bash
+  export OPENAI_ADMIN_KEY=${OPENAI_ADMIN_KEY}
+export PROJECT_NAME=CodexLocal
+  proj_id=$(./bin/openai-admin-project-id.sh)
+  echo "Project id: ${proj_id}"
+  ```
+
+Use OPENAI_ADMIN_KEY in your shell (do not store in files). Then run:
+
+List org certificates:
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh list | jq .
+```
+
+Upload a PEM (from file):
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh upload --name "My Cert" --pem-file ./certs/mycert.pem
+```
+
+Upload via stdin:
+```bash
+cat ./certs/mycert.pem | OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh upload --name "My Cert"
+```
+
+Get (without PEM content):
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh get cert_abc
+```
+
+Get with PEM content:
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh get cert_abc --include-content
+```
+
+Rename:
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh rename cert_abc "Renamed"
+```
+
+Delete (must be inactive):
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh delete cert_abc
+```
+
+Activate/deactivate (organization):
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh activate cert_abc cert_def
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh deactivate cert_abc cert_def
+```
+
+Project scope:
+```bash
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh project-list proj_abc
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh project-activate proj_abc cert_abc cert_def
+OPENAI_ADMIN_KEY=$OPENAI_ADMIN_KEY ./bin/openai-admin-certs.sh project-deactivate proj_abc cert_abc cert_def
+```
+
+Notes:
+- The script never prints secret PEM contents unless you explicitly request --include-content for get.
+- Keep PEM files outside of the repository and never commit them.
+
+## Repository reference
+The upstream repository is cloned into `./codex-src/` for reference only; Codex itself is installed via npm in the container.
+
 <h1 align="center">OpenAI Codex CLI</h1>
 
 <p align="center"><code>npm i -g @openai/codex</code><br />or <code>brew install codex</code></p>

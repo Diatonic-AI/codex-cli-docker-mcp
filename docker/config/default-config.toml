@@ -1,0 +1,104 @@
+# OpenAI Codex CLI Configuration
+# This is the default configuration for the Docker deployment
+
+# Authentication preferences
+preferred_auth_method = "chatgpt"  # Use "apikey" to prefer API key authentication
+
+# Sandbox configuration for security
+sandbox_mode = "workspace-write"    # Options: read-only, workspace-write, danger-full-access
+approval_policy = "on-request"      # Options: untrusted, on-request, never
+
+# Logging configuration
+[logging]
+level = "info"                      # Options: trace, debug, info, warn, error
+file = "logs/codex.log"
+max_size = "10MB"
+max_files = 5
+
+# Workspace configuration
+[workspace]
+default_path = "/workspace"
+auto_create_gitignore = true
+preserve_history = true
+
+# Development tools integration
+[dev_tools]
+auto_install_deps = true
+format_on_save = true
+lint_on_save = false
+test_on_build = false
+
+# MCP (Model Context Protocol) configuration
+# Uncomment and configure MCP servers as needed
+# [mcp_servers]
+
+# Example MCP server configuration
+# [mcp_servers.filesystem]
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+
+# [mcp_servers.git]
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-git", "--repository", "/workspace"]
+
+# Model configuration
+[model]
+default_model = "gpt-4o"           # Default model to use
+temperature = 0.7                  # Creativity level (0.0-2.0)
+max_tokens = 4096                  # Maximum tokens per response
+
+# Security settings
+[security]
+disable_network_access = false    # Set to true for air-gapped environments
+encrypt_logs = false              # Enable log encryption
+audit_trail = true               # Keep audit trail of actions
+
+# UI preferences
+[ui]
+theme = "dark"                    # Options: dark, light, auto
+show_timestamps = true
+compact_mode = false
+editor = "vim"                   # Default editor for file operations
+
+# Performance settings
+[performance]
+cache_enabled = true
+cache_size_mb = 1024
+concurrent_requests = 3
+request_timeout_seconds = 30
+
+# Docker-specific settings
+[docker]
+mount_docker_socket = false      # Enable Docker-in-Docker capabilities
+share_host_network = false       # Share host network with container
+auto_update = false              # Auto-update Codex in container
+
+# Environment-specific overrides
+[profiles]
+
+[profiles.development]
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+logging.level = "debug"
+dev_tools.auto_install_deps = true
+dev_tools.format_on_save = true
+
+[profiles.production]
+sandbox_mode = "read-only"
+approval_policy = "untrusted"
+logging.level = "warn"
+security.disable_network_access = true
+security.encrypt_logs = true
+
+[profiles.ci]
+sandbox_mode = "workspace-write"
+approval_policy = "never"
+logging.level = "info"
+dev_tools.test_on_build = true
+
+# Custom commands and aliases
+[commands]
+# Define custom commands that can be used with Codex
+# Example: test = "npm test"
+# Example: build = "cargo build --release"
+# Example: deploy = "docker build -t app . && docker run app"

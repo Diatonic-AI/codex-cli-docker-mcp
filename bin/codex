@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Helper to enter the Codex container with current env
+set -euo pipefail
+
+dir="$(cd "$(dirname "$0")/.." && pwd -P)"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+mkdir -p "$dir/volumes/codex_home" "$dir/volumes/workspace"
+exec docker compose -f "$dir/docker-compose.yaml" run --rm -e OPENAI_API_KEY codex "$@"

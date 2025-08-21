@@ -1,0 +1,244 @@
+# Docker Compose configuration for OpenAI Codex CLI production deployment
+# Provides a complete development and production environment
+
+version: '3.8'
+
+services:
+  codex:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.production
+      args:
+        - BUILD_DATE=${BUILD_DATE:-now}
+        - VCS_REF=${VCS_REF:-dev}
+    image: openai-codex-cli:latest
+    container_name: codex-main
+    hostname: codex-dev
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - RUST_BACKTRACE=${RUST_BACKTRACE:-1}
+      - DEBUG=${DEBUG:-false}
+      - START_SERVICES=${START_SERVICES:-false}
+      - SETUP_DEV_TOOLS=${SETUP_DEV_TOOLS:-true}
+      - INSTALL_DEV_PACKAGES=${INSTALL_DEV_PACKAGES:-true}
+      - CODEX_HOME=/data/codex-home
+      - WORKSPACE_DIR=/workspace
+      - TOOLS_DIR=/tools
+      - AGENTS_DIR=/agents
+      
+      # OpenAI API configuration (optional - prefer ChatGPT auth)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      
+      # Development flags
+      - NODE_ENV=${NODE_ENV:-development}
+      - DEVELOPMENT_MODE=${DEVELOPMENT_MODE:-true}
+    
+    # Volume mounts for persistent data and development
+    volumes:
+      # Persistent data
+      - codex_home:/data/codex-home
+      - codex_logs:/logs
+      
+      # Development workspace (bind mount for live editing)
+      - ./docker/volumes/workspace:/workspace:rw
+      
+      # Tools and agents directories
+      - ./docker/volumes/tools:/tools:rw
+      - ./docker/volumes/agents:/agents:rw
+      
+      # Configuration (can override defaults)
+      - ./docker/config:/config:ro
+      
+      # Optional: Mount additional projects
+      - ${ADDITIONAL_WORKSPACE:-./docker/volumes/projects}:/projects:rw
+      
+      # Optional: Docker socket for Docker-in-Docker
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+      # Optional: Host SSH keys for git operations
+      - ${HOME}/.ssh:/home/codex/.ssh:ro
+      
+      # Optional: Host git config
+      - ${HOME}/.gitconfig:/home/codex/.gitconfig:ro
+    
+    # Network configuration
+    ports:
+      - "8080:8080"   # Web UI (if enabled)
+      - "3000:3000"   # Development server
+      - "1455:1455"   # Codex authentication server
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "codex", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    
+    # User namespace
+    user: "1000:1000"  # Adjust to match host user
+    
+    # Working directory
+    working_dir: /workspace
+    
+    # Default command (can be overridden)
+    command: bash
+    
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+
+  # Optional: Database for persistent storage of projects/sessions
+  postgres:
+    image: postgres:15-alpine
+    container_name: codex-postgres
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_DB=codex
+      - POSTGRES_USER=codex
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-codex_dev_password}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    
+    ports:
+      - "5432:5432"
+    
+    profiles:
+      - database
+
+  # Optional: Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: codex-redis
+    restart: unless-stopped
+    
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-codex_dev_password}
+    
+    volumes:
+      - redis_data:/data
+    
+    ports:
+      - "6379:6379"
+    
+    profiles:
+      - cache
+
+  # Optional: Web interface for managing Codex instances
+  web-ui:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: codex-web-ui
+    restart: unless-stopped
+    
+    environment:
+      - API_URL=http://codex:8080
+      - DATABASE_URL=postgresql://codex:${POSTGRES_PASSWORD:-codex_dev_password}@postgres:5432/codex
+    
+    ports:
+      - "3001:3000"
+    
+    depends_on:
+      - codex
+      - postgres
+      - redis
+    
+    profiles:
+      - web-ui
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: codex-prometheus
+    restart: unless-stopped
+    
+    volumes:
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    ports:
+      - "9090:9090"
+    
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: codex-grafana
+    restart: unless-stopped
+    
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./ops/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    
+    ports:
+      - "3002:3000"
+    
+    depends_on:
+      - prometheus
+    
+    profiles:
+      - monitoring
+
+# Named volumes for persistent data
+volumes:
+  codex_home:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker/data/codex-home
+  
+  codex_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker/logs
+  
+  postgres_data:
+    driver: local
+  
+  redis_data:
+    driver: local
+  
+  prometheus_data:
+    driver: local
+  
+  grafana_data:
+    driver: local
+
+# Networks
+networks:
+  default:
+    name: codex-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

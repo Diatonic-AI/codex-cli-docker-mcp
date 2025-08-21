@@ -1,0 +1,105 @@
+# Production Dockerfile for OpenAI Codex CLI
+# Based on the official devcontainer but optimized for production deployment
+# with development tools and environment setup
+
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RUST_BACKTRACE=1
+ENV CARGO_TARGET_DIR=/workspace/target
+ENV CODEX_HOME=/data/codex-home
+ENV WORKSPACE_DIR=/workspace
+ENV TOOLS_DIR=/tools
+ENV AGENTS_DIR=/agents
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    software-properties-common \
+    vim \
+    nano \
+    jq \
+    unzip \
+    zip \
+    htop \
+    tree \
+    sudo \
+    nodejs \
+    npm \
+    python3 \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install pnpm (required for the project)
+RUN npm install -g pnpm@10.8.1
+
+# Install Docker CLI (for development workflow)
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+RUN apt-get update && apt-get install -y docker-ce-cli && rm -rf /var/lib/apt/lists/*
+
+# Create codex user for security
+RUN groupadd -r codex && useradd -r -g codex -d /home/codex -s /bin/bash -c "Codex User" codex
+RUN mkdir -p /home/codex && chown -R codex:codex /home/codex
+RUN echo 'codex ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Create necessary directories
+RUN mkdir -p $CODEX_HOME $WORKSPACE_DIR $TOOLS_DIR $AGENTS_DIR /logs /config
+RUN chown -R codex:codex $CODEX_HOME $WORKSPACE_DIR $TOOLS_DIR $AGENTS_DIR /logs /config
+
+# Switch to codex user
+USER codex
+WORKDIR /home/codex
+
+# Install Rust toolchain for codex user
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/home/codex/.cargo/bin:${PATH}"
+
+# Set up workspace
+WORKDIR $WORKSPACE_DIR
+
+# Copy the Codex source code
+COPY --chown=codex:codex . .
+
+# Build the Codex CLI in release mode
+RUN cd codex-rs && cargo build --release --bin codex
+
+# Install the codex binary
+RUN sudo cp codex-rs/target/release/codex /usr/local/bin/codex && sudo chmod +x /usr/local/bin/codex
+
+# Create startup script
+COPY --chown=codex:codex docker/config/entrypoint.sh /entrypoint.sh
+USER root
+RUN chmod +x /entrypoint.sh
+USER codex
+
+# Set up default codex configuration
+COPY --chown=codex:codex docker/config/default-config.toml $CODEX_HOME/config.toml
+
+# Create volume mount points
+VOLUME ["$CODEX_HOME", "$WORKSPACE_DIR", "$TOOLS_DIR", "$AGENTS_DIR", "/logs", "/config"]
+
+# Expose ports (if needed for web UI or API)
+EXPOSE 8080 3000 1455
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD codex --version || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bash"]

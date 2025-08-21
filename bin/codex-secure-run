@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Secure per-run Codex executor
+# - Uses OPENAI_ADMIN_KEY to call the Admin API
+# - Resolves/creates a project, creates a service account per run, captures api_key.value
+# - Writes only the per-run key to Docker secret file (0600)
+# - Runs Codex with API-key mode WITHOUT persisting key in ~/.codex
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
+SECRETS_DIR="$ROOT_DIR/secrets"
+SECRET_FILE="$SECRETS_DIR/openai_api_key"
+PROJECT_NAME="${PROJECT_NAME:-CodexLocal}"
+SERVICE_ACCOUNT_NAME_PREFIX="${SERVICE_ACCOUNT_NAME_PREFIX:-codex-run}"
+
+mkdir -p "$SECRETS_DIR"
+chmod 700 "$SECRETS_DIR"
+
+# If a pre-provisioned non-admin service key is present, use it (fallback)
+if [[ -n "${CODEX_SERVICE_API_KEY:-}" ]]; then
+  umask 177
+  printf '%s' "$CODEX_SERVICE_API_KEY" > "$SECRET_FILE"
+  chmod 600 "$SECRET_FILE"
+else
+  # Require OPENAI_ADMIN_KEY to use Admin API
+  if [[ -z "${OPENAI_ADMIN_KEY:-}" ]]; then
+    read -r -s -p "Enter OPENAI_ADMIN_KEY (will not be stored): " OPENAI_ADMIN_KEY
+    echo 1>&2
+  fi
+  # Source admin client; will use OPENAI_ADMIN_KEY from env
+  ADMIN_SH="$ROOT_DIR/bin/openai-admin.sh"
+  if [[ ! -f "$ADMIN_SH" ]]; then
+    echo "ERROR: missing $ADMIN_SH" >&2
+    exit 2
+  fi
+  # shellcheck source=bin/openai-admin.sh
+  OPENAI_ADMIN_KEY="$OPENAI_ADMIN_KEY" source "$ADMIN_SH"
+
+  # Resolve or create project
+  proj_id="$(admin_project_id_by_name "$PROJECT_NAME" || true)"
+  if [[ -z "$proj_id" ]]; then
+    proj_id="$(admin_create_project "$PROJECT_NAME")"
+  fi
+
+  # Create per-run service account and capture key
+  ts="$(date -u +"%Y%m%d-%H%M%SZ")"
+  sa_name="${SERVICE_ACCOUNT_NAME_PREFIX}-${ts}"
+  service_key="$(admin_create_service_account_key "$proj_id" "$sa_name")"
+
+  umask 177
+  printf '%s' "$service_key" > "$SECRET_FILE"
+  chmod 600 "$SECRET_FILE"
+  unset service_key
+  unset OPENAI_ADMIN_KEY
+fi
+
+# Run the container. We do NOT set OPENAI_API_KEY in the shell; the entrypoint
+# reads from /run/secrets/openai_api_key and exports it for the process only.
+# Force API key preference for this invocation without persisting config by
+# passing --config override to codex.
+if [[ $# -eq 0 ]]; then
+  exec docker compose -f "$ROOT_DIR/docker-compose.yaml" run --rm codex \
+    bash -lc 'codex --config preferred_auth_method="apikey"'
+else
+  exec docker compose -f "$ROOT_DIR/docker-compose.yaml" run --rm codex \
+    bash -lc 'codex --config preferred_auth_method="apikey" "$@"' -- "$@"
+fi

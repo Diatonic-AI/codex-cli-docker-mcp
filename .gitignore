@@ -1,3 +1,19 @@
+# Local runtime volumes
+volumes/
+
+# Local secrets (docker secret files)
+secrets/
+
+# Upstream reference clone (do not push)
+codex-src/
+
+# Node/npm noise if any
+node_modules/
+
+# Logs
+*.log
+.codex/
+
 # deps
 # Node.js dependencies
 node_modules

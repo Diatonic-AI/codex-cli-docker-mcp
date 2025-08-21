@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  codex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/codex-cli:latest
+    container_name: codex-cli
+    environment:
+      # Preferred ChatGPT auth stored in mounted ~/.codex/auth.json
+      - CODEX_HOME=/home/node/.codex
+      - RUST_LOG=codex_core=info,codex_tui=info
+    volumes:
+      # Persist Codex home (auth.json, config.toml, logs) inside project tree
+      - ./volumes/codex_home:/home/node/.codex
+      # Workspace bind-mount for live development of tools/runners/agents
+      - ./volumes/workspace:/workspace
+      # Optional: mount your repositories or tools under ./volumes/workspace
+    secrets:
+      - source: openai_api_key
+        target: openai_api_key
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    # Network is host-like for local dev; lock down in prod as needed
+    # network_mode: host  # optional; comment out if not desired
+    ports:
+      - "1455:1455"   # for login helper (browser auth callback)
+
+# Docker secrets (Compose will mount as files under /run/secrets)
+secrets:
+  openai_api_key:
+    file: ./secrets/openai_api_key
+
+# Named volumes are not used so everything stays inside this directory

@@ -1,0 +1,30 @@
+# Quality chain for Python projects (example)
+# Steps execute locally; when a step fails, pipelines.py will:
+#  - Collect logs
+#  - Summarize the failure
+#  - Ask Codex to propose a targeted patch
+#  - Optionally apply patch and re-run from the failed step
+
+version: 1
+name: python_quality
+steps:
+  - id: lint
+    desc: Run ruff and black in check mode
+    command: bash -lc "ruff check . && black --check ."
+
+  - id: types
+    desc: Type-check with mypy (or pyright)
+    command: bash -lc "mypy ."
+
+  - id: tests
+    desc: Run unit tests with coverage
+    command: bash -lc "pytest -q --maxfail=1 --disable-warnings --color=yes --cov=. --cov-report=term-missing"
+
+  - id: docs
+    desc: Build docs (if present)
+    command: bash -lc "if [ -f docs/conf.py ]; then sphinx-build -b html docs _build/html; else echo 'skip'; fi"
+
+  - id: security
+    desc: Bandit + pip-audit (if Python)
+    command: bash -lc "bandit -q -r . || true; pip-audit || true"
+
